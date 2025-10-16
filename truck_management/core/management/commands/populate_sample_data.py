@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from core.models import Driver, Truck, Destination, DeliveryTask
+from core.models import Company, Driver, Truck, Destination, DeliveryTask
 from decimal import Decimal
 
 
@@ -8,6 +8,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write('Creating sample data...')
+
+        # Create companies
+        company_a, _ = Company.objects.get_or_create(name='Acme Logistics')
+        company_b, _ = Company.objects.get_or_create(name='Bolt Transport')
 
         # Create sample drivers
         drivers_data = [
@@ -42,14 +46,16 @@ class Command(BaseCommand):
         ]
 
         drivers = []
-        for driver_data in drivers_data:
+        for idx, driver_data in enumerate(drivers_data):
+            driver_data['company'] = company_a if idx % 2 == 0 else company_b
             driver, created = Driver.objects.get_or_create(
+                company=driver_data['company'],
                 license_number=driver_data['license_number'],
                 defaults=driver_data
             )
             drivers.append(driver)
             if created:
-                self.stdout.write(f'Created driver: {driver.name}')
+                self.stdout.write(f'Created driver: {driver.name} ({driver.company.name})')
 
         # Create sample trucks
         trucks_data = [
@@ -84,14 +90,16 @@ class Command(BaseCommand):
         ]
 
         trucks = []
-        for truck_data in trucks_data:
+        for idx, truck_data in enumerate(trucks_data):
+            truck_data['company'] = company_a if idx % 2 == 0 else company_b
             truck, created = Truck.objects.get_or_create(
+                company=truck_data['company'],
                 plate_number=truck_data['plate_number'],
                 defaults=truck_data
             )
             trucks.append(truck)
             if created:
-                self.stdout.write(f'Created truck: {truck.model} ({truck.plate_number})')
+                self.stdout.write(f'Created truck: {truck.model} ({truck.plate_number}) ({truck.company.name})')
 
         # Create sample destinations
         destinations_data = [
@@ -128,18 +136,21 @@ class Command(BaseCommand):
         ]
 
         destinations = []
-        for dest_data in destinations_data:
+        for idx, dest_data in enumerate(destinations_data):
+            dest_data['company'] = company_a if idx % 2 == 0 else company_b
             destination, created = Destination.objects.get_or_create(
+                company=dest_data['company'],
                 name=dest_data['name'],
                 defaults=dest_data
             )
             destinations.append(destination)
             if created:
-                self.stdout.write(f'Created destination: {destination.name}')
+                self.stdout.write(f'Created destination: {destination.name} ({destination.company.name})')
 
         # Create sample delivery tasks
         tasks_data = [
             {
+                'company': company_a,
                 'driver': drivers[0],
                 'truck': trucks[0],
                 'destinations': [destinations[0], destinations[1]],
@@ -148,6 +159,7 @@ class Command(BaseCommand):
                 'status': 'assigned'
             },
             {
+                'company': company_b,
                 'driver': drivers[1],
                 'truck': trucks[1],
                 'destinations': [destinations[2], destinations[3]],
@@ -160,6 +172,7 @@ class Command(BaseCommand):
         for task_data in tasks_data:
             destinations_list = task_data.pop('destinations')
             task, created = DeliveryTask.objects.get_or_create(
+                company=task_data['company'],
                 driver=task_data['driver'],
                 truck=task_data['truck'],
                 product_name=task_data['product_name'],

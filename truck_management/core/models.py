@@ -1,5 +1,43 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.contrib.auth.models import User
+class Company(models.Model):
+    """
+    Represents a tenant/company. All core data is scoped to a company.
+    """
+    name = models.CharField(max_length=200, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Company'
+        verbose_name_plural = 'Companies'
+
+    def __str__(self):
+        return self.name
+
+
+class CompanyAdmin(models.Model):
+    """
+    Role linking a Django user to a company admin.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='company_admin')
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='admins')
+
+    def __str__(self):
+        return f"Admin {self.user.username} @ {self.company.name}"
+
+
+class DriverUser(models.Model):
+    """
+    Role linking a Django user to a specific driver.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='driver_user')
+    driver = models.OneToOneField('Driver', on_delete=models.CASCADE, related_name='user_account')
+
+    def __str__(self):
+        return f"DriverUser {self.user.username} -> {self.driver.name}"
 
 
 class Driver(models.Model):
@@ -11,11 +49,11 @@ class Driver(models.Model):
         ('on_mission', 'On Mission'),
     ]
     
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='drivers')
     name = models.CharField(max_length=100, help_text="Driver's full name")
     phone = models.CharField(max_length=20, help_text="Driver's contact phone number")
     license_number = models.CharField(
-        max_length=50, 
-        unique=True, 
+        max_length=50,
         help_text="Driver's license number"
     )
     experience_years = models.PositiveIntegerField(
@@ -33,6 +71,9 @@ class Driver(models.Model):
     
     class Meta:
         ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(fields=['company', 'license_number'], name='uniq_driver_company_license')
+        ]
         verbose_name = 'Driver'
         verbose_name_plural = 'Drivers'
     
@@ -56,9 +97,9 @@ class Truck(models.Model):
         ('hybrid', 'Hybrid'),
     ]
     
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='trucks')
     plate_number = models.CharField(
-        max_length=20, 
-        unique=True, 
+        max_length=20,
         help_text="Truck's license plate number"
     )
     model = models.CharField(max_length=100, help_text="Truck model and make")
@@ -82,6 +123,9 @@ class Truck(models.Model):
     
     class Meta:
         ordering = ['plate_number']
+        constraints = [
+            models.UniqueConstraint(fields=['company', 'plate_number'], name='uniq_truck_company_plate')
+        ]
         verbose_name = 'Truck'
         verbose_name_plural = 'Trucks'
     
@@ -93,6 +137,7 @@ class Destination(models.Model):
     """
     Destination model representing delivery locations.
     """
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='destinations')
     name = models.CharField(max_length=200, help_text="Destination name or business name")
     address = models.TextField(help_text="Full address of the destination")
     latitude = models.DecimalField(
@@ -127,6 +172,7 @@ class DeliveryTask(models.Model):
         ('completed', 'Completed'),
     ]
     
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='delivery_tasks')
     driver = models.ForeignKey(
         Driver, 
         on_delete=models.CASCADE, 

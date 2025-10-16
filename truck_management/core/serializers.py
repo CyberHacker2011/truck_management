@@ -1,5 +1,11 @@
 from rest_framework import serializers
-from .models import Driver, Truck, Destination, DeliveryTask
+from .models import Company, Driver, Truck, Destination, DeliveryTask
+class CompanySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Company
+        fields = ['id', 'name', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
 
 
 class DriverSerializer(serializers.ModelSerializer):
@@ -9,7 +15,7 @@ class DriverSerializer(serializers.ModelSerializer):
     class Meta:
         model = Driver
         fields = [
-            'id', 'name', 'phone', 'license_number', 
+            'id', 'company', 'name', 'phone', 'license_number', 
             'experience_years', 'status', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -18,7 +24,11 @@ class DriverSerializer(serializers.ModelSerializer):
         """
         Validate that license number is unique.
         """
-        if Driver.objects.filter(license_number=value).exclude(id=self.instance.id if self.instance else None).exists():
+        company = self.initial_data.get('company') or getattr(self.instance, 'company_id', None)
+        qs = Driver.objects.all()
+        if company:
+            qs = qs.filter(company_id=company)
+        if qs.filter(license_number=value).exclude(id=self.instance.id if self.instance else None).exists():
             raise serializers.ValidationError("Driver with this license number already exists.")
         return value
 
@@ -30,7 +40,7 @@ class TruckSerializer(serializers.ModelSerializer):
     class Meta:
         model = Truck
         fields = [
-            'id', 'plate_number', 'model', 'capacity_kg', 
+            'id', 'company', 'plate_number', 'model', 'capacity_kg', 
             'fuel_type', 'current_status', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -39,7 +49,11 @@ class TruckSerializer(serializers.ModelSerializer):
         """
         Validate that plate number is unique.
         """
-        if Truck.objects.filter(plate_number=value).exclude(id=self.instance.id if self.instance else None).exists():
+        company = self.initial_data.get('company') or getattr(self.instance, 'company_id', None)
+        qs = Truck.objects.all()
+        if company:
+            qs = qs.filter(company_id=company)
+        if qs.filter(plate_number=value).exclude(id=self.instance.id if self.instance else None).exists():
             raise serializers.ValidationError("Truck with this plate number already exists.")
         return value
 
@@ -51,7 +65,7 @@ class DestinationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Destination
         fields = [
-            'id', 'name', 'address', 'latitude', 'longitude', 
+            'id', 'company', 'name', 'address', 'latitude', 'longitude', 
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -89,7 +103,7 @@ class DeliveryTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveryTask
         fields = [
-            'id', 'driver', 'truck', 'destinations', 'destination_ids',
+            'id', 'company', 'driver', 'truck', 'destinations', 'destination_ids',
             'driver_name', 'truck_plate', 'destinations_list',
             'product_name', 'product_weight', 'status', 
             'created_at', 'updated_at'

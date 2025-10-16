@@ -1,12 +1,30 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Q
-from .models import Driver, Truck, Destination, DeliveryTask
+from .models import Company, Driver, Truck, Destination, DeliveryTask, CompanyAdmin, DriverUser
 from .serializers import (
-    DriverSerializer, TruckSerializer, DestinationSerializer, 
+    CompanySerializer, DriverSerializer, TruckSerializer, DestinationSerializer, 
     DeliveryTaskSerializer, TaskAssignmentSerializer
 )
+def get_user_company(request):
+    user = request.user
+    if not user or not user.is_authenticated:
+        return None
+    if user.is_superuser:
+        return None
+    if hasattr(user, 'company_admin'):
+        return user.company_admin.company
+    if hasattr(user, 'driver_user'):
+        return user.driver_user.driver.company
+    return None
+
+
+class CompanyViewSet(viewsets.ModelViewSet):
+    queryset = Company.objects.all()
+    serializer_class = CompanySerializer
+    permission_classes = [permissions.IsAdminUser]
+
 from .maps_utils import (
     calculate_route_google_maps, calculate_route_yandex_maps,
     optimize_delivery_route, get_geocoding_info, reverse_geocoding
@@ -19,25 +37,45 @@ class DriverViewSet(viewsets.ModelViewSet):
     """
     queryset = Driver.objects.all()
     serializer_class = DriverSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         """
         Filter drivers by status if provided.
         """
+        user_company = get_user_company(self.request)
         queryset = Driver.objects.all()
+        if user_company:
+            queryset = queryset.filter(company=user_company)
         status_filter = self.request.query_params.get('status', None)
         
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         
         return queryset
+
+    def perform_create(self, serializer):
+        user_company = get_user_company(self.request)
+        if not (self.request.user.is_superuser or hasattr(self.request.user, 'company_admin')):
+            raise permissions.PermissionDenied('Only company admins can create drivers')
+        serializer.save(company=user_company)
+
+    def perform_update(self, serializer):
+        user_company = get_user_company(self.request)
+        instance = self.get_object()
+        if not (self.request.user.is_superuser or (hasattr(self.request.user, 'company_admin') and instance.company_id == user_company.id)):
+            raise permissions.PermissionDenied('Not allowed')
+        serializer.save()
     
     @action(detail=False, methods=['get'])
     def available(self, request):
         """
         Get all available drivers.
         """
+        user_company = get_user_company(request)
         available_drivers = Driver.objects.filter(status='available')
+        if user_company:
+            available_drivers = available_drivers.filter(company=user_company)
         serializer = self.get_serializer(available_drivers, many=True)
         return Response(serializer.data)
 
@@ -48,12 +86,16 @@ class TruckViewSet(viewsets.ModelViewSet):
     """
     queryset = Truck.objects.all()
     serializer_class = TruckSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         """
         Filter trucks by status if provided.
         """
+        user_company = get_user_company(self.request)
         queryset = Truck.objects.all()
+        if user_company:
+            queryset = queryset.filter(company=user_company)
         status_filter = self.request.query_params.get('status', None)
         fuel_type_filter = self.request.query_params.get('fuel_type', None)
         
@@ -64,13 +106,29 @@ class TruckViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(fuel_type=fuel_type_filter)
         
         return queryset
+
+    def perform_create(self, serializer):
+        user_company = get_user_company(self.request)
+        if not (self.request.user.is_superuser or hasattr(self.request.user, 'company_admin')):
+            raise permissions.PermissionDenied('Only company admins can create trucks')
+        serializer.save(company=user_company)
+
+    def perform_update(self, serializer):
+        user_company = get_user_company(self.request)
+        instance = self.get_object()
+        if not (self.request.user.is_superuser or (hasattr(self.request.user, 'company_admin') and instance.company_id == user_company.id)):
+            raise permissions.PermissionDenied('Not allowed')
+        serializer.save()
     
     @action(detail=False, methods=['get'])
     def available(self, request):
         """
         Get all available trucks.
         """
+        user_company = get_user_company(request)
         available_trucks = Truck.objects.filter(current_status='idle')
+        if user_company:
+            available_trucks = available_trucks.filter(company=user_company)
         serializer = self.get_serializer(available_trucks, many=True)
         return Response(serializer.data)
 
@@ -81,12 +139,16 @@ class DestinationViewSet(viewsets.ModelViewSet):
     """
     queryset = Destination.objects.all()
     serializer_class = DestinationSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         """
         Search destinations by name or address.
         """
+        user_company = get_user_company(self.request)
         queryset = Destination.objects.all()
+        if user_company:
+            queryset = queryset.filter(company=user_company)
         search = self.request.query_params.get('search', None)
         
         if search:
@@ -96,6 +158,19 @@ class DestinationViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    def perform_create(self, serializer):
+        user_company = get_user_company(self.request)
+        if not (self.request.user.is_superuser or hasattr(self.request.user, 'company_admin')):
+            raise permissions.PermissionDenied('Only company admins can create destinations')
+        serializer.save(company=user_company)
+
+    def perform_update(self, serializer):
+        user_company = get_user_company(self.request)
+        instance = self.get_object()
+        if not (self.request.user.is_superuser or (hasattr(self.request.user, 'company_admin') and instance.company_id == user_company.id)):
+            raise permissions.PermissionDenied('Not allowed')
+        serializer.save()
+
 
 class DeliveryTaskViewSet(viewsets.ModelViewSet):
     """
@@ -103,12 +178,18 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
     """
     queryset = DeliveryTask.objects.select_related('driver', 'truck').prefetch_related('destinations')
     serializer_class = DeliveryTaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         """
         Filter tasks by status, driver, or truck if provided.
         """
+        user_company = get_user_company(self.request)
         queryset = DeliveryTask.objects.select_related('driver', 'truck').prefetch_related('destinations')
+        if user_company:
+            queryset = queryset.filter(company=user_company)
+        elif self.request.user.is_authenticated and hasattr(self.request.user, 'driver_user'):
+            queryset = queryset.filter(driver=self.request.user.driver_user.driver)
         status_filter = self.request.query_params.get('status', None)
         driver_filter = self.request.query_params.get('driver', None)
         truck_filter = self.request.query_params.get('truck', None)
@@ -123,6 +204,19 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(truck_id=truck_filter)
         
         return queryset
+
+    def perform_create(self, serializer):
+        user_company = get_user_company(self.request)
+        if not (self.request.user.is_superuser or hasattr(self.request.user, 'company_admin')):
+            raise permissions.PermissionDenied('Only company admins can create tasks')
+        serializer.save(company=user_company)
+
+    def perform_update(self, serializer):
+        user_company = get_user_company(self.request)
+        instance = self.get_object()
+        if not (self.request.user.is_superuser or (hasattr(self.request.user, 'company_admin') and instance.company_id == user_company.id)):
+            raise permissions.PermissionDenied('Not allowed')
+        serializer.save()
     
     @action(detail=False, methods=['post'])
     def assign(self, request):
@@ -139,6 +233,11 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
                 'product_weight': serializer.validated_data['product_weight'],
                 'status': 'assigned'
             }
+            user_company = get_user_company(request)
+            if user_company is None and not request.user.is_superuser:
+                return Response({'error': 'Company context required'}, status=status.HTTP_403_FORBIDDEN)
+            if user_company:
+                task_data['company_id'] = user_company.id
             
             task = DeliveryTask.objects.create(**task_data)
             
