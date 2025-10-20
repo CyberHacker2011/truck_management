@@ -1,6 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import CompanyViewSet, DriverViewSet, TruckViewSet, DestinationViewSet, DeliveryTaskViewSet
+from .views import task_create_view, task_detail_view
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -17,6 +18,8 @@ router.register(r'delivery-tasks', DeliveryTaskViewSet)
 # The API URLs are now determined automatically by the router
 urlpatterns = [
     path('', include(router.urls)),
+    path('tasks/create/', task_create_view, name='task-create'),
+    path('tasks/<int:pk>/', task_detail_view, name='task-detail'),
     path('auth/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

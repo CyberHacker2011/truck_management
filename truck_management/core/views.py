@@ -1,12 +1,15 @@
 from rest_framework import viewsets, status, permissions
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
+from django.conf import settings
 from .models import Company, Driver, Truck, Destination, DeliveryTask, CompanyAdmin, DriverUser
 from .serializers import (
     CompanySerializer, DriverSerializer, TruckSerializer, DestinationSerializer, 
     DeliveryTaskSerializer, TaskAssignmentSerializer
 )
+from .services.yandex_map import YandexMapService
 def get_user_company(request):
     user = request.user
     if not user or not user.is_authenticated:
@@ -209,7 +212,80 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
         user_company = get_user_company(self.request)
         if not (self.request.user.is_superuser or hasattr(self.request.user, 'company_admin')):
             raise permissions.PermissionDenied('Only company admins can create tasks')
-        serializer.save(company=user_company)
+        task = serializer.save(company=user_company)
+        # Generate route after creation if destinations exist
+        destination_points = list(task.destinations.all())
+        if destination_points:
+            try:
+                api_key = getattr(settings, 'YANDEX_API_KEY', None)
+                yandex = YandexMapService(api_key)
+                coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
+                route_json = yandex.build_circular_route(coords)
+                task.route_data = route_json
+                task.save()
+            except Exception as exc:
+                # Keep task creation even if routing fails
+                task.route_data = {
+                    'error': 'routing_failed',
+                    'message': str(exc)
+                }
+                task.save()
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def task_create_view(request):
+    """
+    Create a task, generate Yandex route, and save it.
+    """
+    user_company = get_user_company(request)
+    if not (request.user.is_superuser or hasattr(request.user, 'company_admin')):
+        return Response({'detail': 'Only company admins can create tasks'}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = DeliveryTaskSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    task = serializer.save(company=user_company)
+
+    destination_ids = request.data.get('destination_ids') or []
+    if destination_ids:
+        destinations = Destination.objects.filter(id__in=destination_ids)
+        task.destinations.set(destinations)
+
+    # Generate route
+    destination_points = list(task.destinations.all())
+    if destination_points:
+        try:
+            api_key = getattr(settings, 'YANDEX_API_KEY', None)
+            yandex = YandexMapService(api_key)
+            coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
+            route_json = yandex.build_circular_route(coords)
+            task.route_data = route_json
+            task.save()
+        except Exception as exc:
+            task.route_data = {
+                'error': 'routing_failed',
+                'message': str(exc)
+            }
+            task.save()
+
+    return Response(DeliveryTaskSerializer(task).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def task_detail_view(request, pk: int):
+    """
+    Return full task info, including route_data, company-isolated.
+    """
+    user_company = get_user_company(request)
+    qs = DeliveryTask.objects.select_related('driver', 'truck').prefetch_related('destinations')
+    if user_company:
+        qs = qs.filter(company=user_company)
+    elif hasattr(request.user, 'driver_user'):
+        qs = qs.filter(driver=request.user.driver_user.driver)
+
+    task = get_object_or_404(qs, pk=pk)
+    return Response(DeliveryTaskSerializer(task).data)
 
     def perform_update(self, serializer):
         user_company = get_user_company(self.request)

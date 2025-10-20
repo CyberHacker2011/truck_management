@@ -198,6 +198,8 @@ truck_management/
 - `GET /api/trucks/available/` - Available trucks only
 - `GET /api/delivery-tasks/active/` - Active tasks only
 - `POST /api/delivery-tasks/assign/` - Assign new task
+- `POST /api/tasks/create/` - Create task with Yandex route generation
+- `GET /api/tasks/<id>/` - Get task with complete route data
 
 ## 🛡️ Security Features
 
@@ -207,14 +209,27 @@ truck_management/
 - **Input Validation**: Comprehensive data validation and sanitization
 - **CORS Configuration**: Proper cross-origin request handling
 
-## 🗺️ Maps Integration Ready
+## 🗺️ Yandex Maps Integration
 
-The system is prepared for integration with:
+The system now includes **full Yandex Maps API integration**:
 
-- **Google Maps API**: Route calculation and optimization
-- **Yandex Maps API**: Alternative mapping service
-- **Geocoding Services**: Address to coordinates conversion
-- **Reverse Geocoding**: Coordinates to address lookup
+- **Automatic Route Generation**: Circular routes generated when tasks are created
+- **Route Data Storage**: Complete route JSON stored in `route_data` field
+- **Geocoding Support**: Address to coordinates conversion
+- **Error Handling**: Graceful fallback when API is unavailable
+- **Company Isolation**: All routes are company-scoped
+
+### New API Endpoints
+
+- `POST /api/tasks/create/` - Create task with automatic route generation
+- `GET /api/tasks/<id>/` - Retrieve task with full route data
+
+### Environment Setup
+
+Add to your `.env` file:
+```env
+YANDEX_API_KEY=your_yandex_api_key_here
+```
 
 ## 📊 Database Schema
 
@@ -227,6 +242,7 @@ The system is prepared for integration with:
 - **Truck**: Vehicle information with company assignment
 - **Destination**: Delivery locations with company assignment
 - **DeliveryTask**: Tasks linking drivers, trucks, and destinations
+  - **route_data**: JSONField storing Yandex route information
 
 ### Key Constraints
 

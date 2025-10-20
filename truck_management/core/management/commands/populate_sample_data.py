@@ -9,11 +9,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write('Creating sample data...')
 
-        # Create companies
+        # Create single company for testing
         company_a, _ = Company.objects.get_or_create(name='Acme Logistics')
-        company_b, _ = Company.objects.get_or_create(name='Bolt Transport')
 
-        # Create sample drivers
+        # Create one driver
         drivers_data = [
             {
                 'name': 'John Smith',
@@ -22,32 +21,11 @@ class Command(BaseCommand):
                 'experience_years': 8,
                 'status': 'available'
             },
-            {
-                'name': 'Sarah Johnson',
-                'phone': '+1-555-0102',
-                'license_number': 'DL001235',
-                'experience_years': 5,
-                'status': 'available'
-            },
-            {
-                'name': 'Mike Wilson',
-                'phone': '+1-555-0103',
-                'license_number': 'DL001236',
-                'experience_years': 12,
-                'status': 'available'
-            },
-            {
-                'name': 'Lisa Brown',
-                'phone': '+1-555-0104',
-                'license_number': 'DL001237',
-                'experience_years': 3,
-                'status': 'available'
-            }
         ]
 
         drivers = []
         for idx, driver_data in enumerate(drivers_data):
-            driver_data['company'] = company_a if idx % 2 == 0 else company_b
+            driver_data['company'] = company_a
             driver, created = Driver.objects.get_or_create(
                 company=driver_data['company'],
                 license_number=driver_data['license_number'],
@@ -57,7 +35,7 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write(f'Created driver: {driver.name} ({driver.company.name})')
 
-        # Create sample trucks
+        # Create one truck
         trucks_data = [
             {
                 'plate_number': 'TRK001',
@@ -65,33 +43,12 @@ class Command(BaseCommand):
                 'capacity_kg': 1000,
                 'fuel_type': 'diesel',
                 'current_status': 'idle'
-            },
-            {
-                'plate_number': 'TRK002',
-                'model': 'Chevrolet Silverado',
-                'capacity_kg': 1500,
-                'fuel_type': 'diesel',
-                'current_status': 'idle'
-            },
-            {
-                'plate_number': 'TRK003',
-                'model': 'Tesla Semi',
-                'capacity_kg': 2000,
-                'fuel_type': 'electric',
-                'current_status': 'idle'
-            },
-            {
-                'plate_number': 'TRK004',
-                'model': 'Toyota Tacoma',
-                'capacity_kg': 800,
-                'fuel_type': 'gasoline',
-                'current_status': 'idle'
             }
         ]
 
         trucks = []
         for idx, truck_data in enumerate(trucks_data):
-            truck_data['company'] = company_a if idx % 2 == 0 else company_b
+            truck_data['company'] = company_a
             truck, created = Truck.objects.get_or_create(
                 company=truck_data['company'],
                 plate_number=truck_data['plate_number'],
@@ -101,7 +58,7 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write(f'Created truck: {truck.model} ({truck.plate_number}) ({truck.company.name})')
 
-        # Create sample destinations
+        # Create three destinations
         destinations_data = [
             {
                 'name': 'Central Warehouse',
@@ -120,24 +77,12 @@ class Command(BaseCommand):
                 'address': '789 Supply Ave, Midtown, NY 10003',
                 'latitude': Decimal('40.7505'),
                 'longitude': Decimal('-73.9934')
-            },
-            {
-                'name': 'East Storage Facility',
-                'address': '321 Depot Rd, East Side, NY 10004',
-                'latitude': Decimal('40.7282'),
-                'longitude': Decimal('-73.7949')
-            },
-            {
-                'name': 'West Fulfillment Center',
-                'address': '654 Delivery St, West Side, NY 10005',
-                'latitude': Decimal('40.7505'),
-                'longitude': Decimal('-74.0014')
             }
         ]
 
         destinations = []
         for idx, dest_data in enumerate(destinations_data):
-            dest_data['company'] = company_a if idx % 2 == 0 else company_b
+            dest_data['company'] = company_a
             destination, created = Destination.objects.get_or_create(
                 company=dest_data['company'],
                 name=dest_data['name'],
@@ -147,42 +92,21 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write(f'Created destination: {destination.name} ({destination.company.name})')
 
-        # Create sample delivery tasks
-        tasks_data = [
-            {
-                'company': company_a,
-                'driver': drivers[0],
-                'truck': trucks[0],
-                'destinations': [destinations[0], destinations[1]],
-                'product_name': 'Electronics Components',
-                'product_weight': 500,
-                'status': 'assigned'
-            },
-            {
-                'company': company_b,
-                'driver': drivers[1],
-                'truck': trucks[1],
-                'destinations': [destinations[2], destinations[3]],
-                'product_name': 'Furniture Parts',
-                'product_weight': 800,
-                'status': 'assigned'
-            }
-        ]
-
-        for task_data in tasks_data:
-            destinations_list = task_data.pop('destinations')
+        # Create one task with 3 destinations
+        if drivers and trucks and len(destinations) >= 3:
             task, created = DeliveryTask.objects.get_or_create(
-                company=task_data['company'],
-                driver=task_data['driver'],
-                truck=task_data['truck'],
-                product_name=task_data['product_name'],
-                defaults=task_data
+                company=company_a,
+                driver=drivers[0],
+                truck=trucks[0],
+                product_name='Sample Goods',
+                product_weight=500,
+                status='assigned'
             )
+            task.destinations.set(destinations[:3])
             if created:
-                task.destinations.set(destinations_list)
                 self.stdout.write(f'Created delivery task: {task.product_name} - {task.driver.name}')
 
         self.stdout.write(
             self.style.SUCCESS('Successfully populated database with sample data!')
         )
-        self.stdout.write(f'Created {len(drivers)} drivers, {len(trucks)} trucks, {len(destinations)} destinations, and {len(tasks_data)} delivery tasks.')
+        self.stdout.write(f'Created {len(drivers)} drivers, {len(trucks)} trucks, {len(destinations)} destinations, and 1 delivery task.')

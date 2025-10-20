@@ -203,6 +203,8 @@ class DeliveryTask(models.Model):
         default='assigned',
         help_text="Current status of the delivery task"
     )
+    # Stores full Yandex route JSON (coordinates, distance, duration)
+    route_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

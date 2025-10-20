@@ -105,10 +105,10 @@ class DeliveryTaskSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'company', 'driver', 'truck', 'destinations', 'destination_ids',
             'driver_name', 'truck_plate', 'destinations_list',
-            'product_name', 'product_weight', 'status', 
+            'product_name', 'product_weight', 'status', 'route_data', 
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'route_data', 'company']
     
     def validate(self, data):
         """
