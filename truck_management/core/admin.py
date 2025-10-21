@@ -137,7 +137,7 @@ class DeliveryTaskAdmin(admin.ModelAdmin):
             'fields': ('product_name', 'product_weight', 'status')
         }),
         ('Assignment', {
-            'fields': ('driver', 'truck', 'destinations')
+            'fields': ('company', 'driver', 'truck', 'destinations')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
@@ -157,6 +157,24 @@ class DeliveryTaskAdmin(admin.ModelAdmin):
         if hasattr(request.user, 'driver_user'):
             return qs.filter(driver=request.user.driver_user.driver)
         return qs
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        """Limit FK choices to the user's company in admin."""
+        if hasattr(request.user, 'company_admin'):
+            company = request.user.company_admin.company
+            if db_field.name == 'driver':
+                kwargs['queryset'] = Driver.objects.filter(company=company)
+            if db_field.name == 'truck':
+                kwargs['queryset'] = Truck.objects.filter(company=company)
+            if db_field.name == 'company':
+                kwargs['queryset'] = Company.objects.filter(id=company.id)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        """Auto-set company on create for company admins."""
+        if not obj.company_id and hasattr(request.user, 'company_admin'):
+            obj.company = request.user.company_admin.company
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(DriverUser)

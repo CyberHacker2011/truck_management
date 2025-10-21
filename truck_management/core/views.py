@@ -9,7 +9,7 @@ from .serializers import (
     CompanySerializer, DriverSerializer, TruckSerializer, DestinationSerializer, 
     DeliveryTaskSerializer, TaskAssignmentSerializer
 )
-from .services.yandex_map import YandexMapService
+from .services.openroute_service import OpenRouteService
 def get_user_company(request):
     user = request.user
     if not user or not user.is_authenticated:
@@ -186,13 +186,16 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Filter tasks by status, driver, or truck if provided.
+        Drivers should only see their own tasks; company admins see their company's tasks.
         """
-        user_company = get_user_company(self.request)
         queryset = DeliveryTask.objects.select_related('driver', 'truck').prefetch_related('destinations')
+        # Drivers are scoped to their own tasks only
+        if self.request.user.is_authenticated and hasattr(self.request.user, 'driver_user'):
+            return queryset.filter(driver=self.request.user.driver_user.driver)
+        # Company admins are scoped to their company
+        user_company = get_user_company(self.request)
         if user_company:
             queryset = queryset.filter(company=user_company)
-        elif self.request.user.is_authenticated and hasattr(self.request.user, 'driver_user'):
-            queryset = queryset.filter(driver=self.request.user.driver_user.driver)
         status_filter = self.request.query_params.get('status', None)
         driver_filter = self.request.query_params.get('driver', None)
         truck_filter = self.request.query_params.get('truck', None)
@@ -213,14 +216,24 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
         if not (self.request.user.is_superuser or hasattr(self.request.user, 'company_admin')):
             raise permissions.PermissionDenied('Only company admins can create tasks')
         task = serializer.save(company=user_company)
+        
+        # Handle destinations if provided
+        destination_ids = self.request.data.get('destination_ids', [])
+        if destination_ids:
+            destinations = Destination.objects.filter(
+                id__in=destination_ids,
+                company=user_company
+            )
+            task.destinations.set(destinations)
+        
         # Generate route after creation if destinations exist
         destination_points = list(task.destinations.all())
         if destination_points:
             try:
-                api_key = getattr(settings, 'YANDEX_API_KEY', None)
-                yandex = YandexMapService(api_key)
+                api_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', None)
+                google_maps = OpenRouteService(api_key)
                 coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
-                route_json = yandex.build_circular_route(coords)
+                route_json = google_maps.build_circular_route(coords)
                 task.route_data = route_json
                 task.save()
             except Exception as exc:
@@ -232,6 +245,14 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
                 task.save()
 
 
+    def perform_update(self, serializer):
+        """Ensure updates respect company scoping."""
+        user_company = get_user_company(self.request)
+        instance = self.get_object()
+        if not (self.request.user.is_superuser or (hasattr(self.request.user, 'company_admin') and instance.company_id == (user_company.id if user_company else None))):
+            raise permissions.PermissionDenied('Not allowed')
+        serializer.save()
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def task_create_view(request):
@@ -242,23 +263,42 @@ def task_create_view(request):
     if not (request.user.is_superuser or hasattr(request.user, 'company_admin')):
         return Response({'detail': 'Only company admins can create tasks'}, status=status.HTTP_403_FORBIDDEN)
 
+    # Validate driver and truck belong to user's company
+    driver_id = request.data.get('driver')
+    truck_id = request.data.get('truck')
+    if not driver_id or not truck_id:
+        return Response({'detail': 'driver and truck are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        driver = Driver.objects.get(id=driver_id)
+        truck = Truck.objects.get(id=truck_id)
+    except (Driver.DoesNotExist, Truck.DoesNotExist):
+        return Response({'detail': 'driver or truck not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if user_company and (driver.company_id != user_company.id or truck.company_id != user_company.id):
+        return Response({'detail': 'Driver and truck must belong to your company'}, status=status.HTTP_400_BAD_REQUEST)
+
     serializer = DeliveryTaskSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     task = serializer.save(company=user_company)
 
     destination_ids = request.data.get('destination_ids') or []
     if destination_ids:
-        destinations = Destination.objects.filter(id__in=destination_ids)
+        # Filter destinations by company to ensure security
+        destinations = Destination.objects.filter(
+            id__in=destination_ids,
+            company=user_company
+        )
         task.destinations.set(destinations)
 
     # Generate route
     destination_points = list(task.destinations.all())
     if destination_points:
         try:
-            api_key = getattr(settings, 'YANDEX_API_KEY', None)
-            yandex = YandexMapService(api_key)
+            api_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', None)
+            google_maps = OpenRouteService(api_key)
             coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
-            route_json = yandex.build_circular_route(coords)
+            route_json = google_maps.build_circular_route(coords)
             task.route_data = route_json
             task.save()
         except Exception as exc:
@@ -302,24 +342,29 @@ def task_detail_view(request, pk: int):
         serializer = TaskAssignmentSerializer(data=request.data)
         if serializer.is_valid():
             # Create the delivery task
-            task_data = {
-                'driver_id': serializer.validated_data['driver_id'],
-                'truck_id': serializer.validated_data['truck_id'],
-                'product_name': serializer.validated_data['product_name'],
-                'product_weight': serializer.validated_data['product_weight'],
-                'status': 'assigned'
-            }
             user_company = get_user_company(request)
             if user_company is None and not request.user.is_superuser:
                 return Response({'error': 'Company context required'}, status=status.HTTP_403_FORBIDDEN)
-            if user_company:
-                task_data['company_id'] = user_company.id
             
-            task = DeliveryTask.objects.create(**task_data)
+            # Get driver and truck objects
+            driver = Driver.objects.get(id=serializer.validated_data['driver_id'])
+            truck = Truck.objects.get(id=serializer.validated_data['truck_id'])
             
-            # Add destinations
+            task = DeliveryTask.objects.create(
+                company=user_company,
+                driver=driver,
+                truck=truck,
+                product_name=serializer.validated_data['product_name'],
+                product_weight=serializer.validated_data['product_weight'],
+                status='assigned'
+            )
+            
+            # Add destinations with company filtering
             destination_ids = serializer.validated_data['destination_ids']
-            destinations = Destination.objects.filter(id__in=destination_ids)
+            destinations = Destination.objects.filter(
+                id__in=destination_ids,
+                company=user_company
+            )
             task.destinations.set(destinations)
             
             # Return the created task

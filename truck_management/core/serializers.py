@@ -97,6 +97,7 @@ class DeliveryTaskSerializer(serializers.ModelSerializer):
     destination_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
+        required=False,
         help_text="List of destination IDs for this task"
     )
     
@@ -138,11 +139,19 @@ class DeliveryTaskSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """
-        Create delivery task with destinations.
+        Create delivery task. Handle M2M destinations safely.
         """
-        destination_ids = validated_data.pop('destination_ids', [])
+        # Remove destination_ids from validated_data as it's handled in the view
+        destination_ids = validated_data.pop('destination_ids', None)
+        # Also pop 'destinations' to avoid passing M2M into create(**kwargs)
+        destinations_m2m = validated_data.pop('destinations', None)
         task = DeliveryTask.objects.create(**validated_data)
         
+        # If destinations provided as objects, set them
+        if destinations_m2m is not None:
+            task.destinations.set(destinations_m2m)
+        
+        # If destination_ids provided, set them (view may also handle this)
         if destination_ids:
             destinations = Destination.objects.filter(id__in=destination_ids)
             task.destinations.set(destinations)
@@ -225,9 +234,10 @@ class TaskAssignmentSerializer(serializers.Serializer):
     
     def validate(self, data):
         """
-        Validate product weight against truck capacity.
+        Validate product weight against truck capacity and company consistency.
         """
         truck_id = data.get('truck_id')
+        driver_id = data.get('driver_id')
         product_weight = data.get('product_weight')
         
         if truck_id and product_weight:
@@ -235,6 +245,15 @@ class TaskAssignmentSerializer(serializers.Serializer):
             if product_weight > truck.capacity_kg:
                 raise serializers.ValidationError(
                     f"Product weight ({product_weight}kg) exceeds truck capacity ({truck.capacity_kg}kg)"
+                )
+        
+        # Validate that driver and truck belong to the same company
+        if driver_id and truck_id:
+            driver = Driver.objects.get(id=driver_id)
+            truck = Truck.objects.get(id=truck_id)
+            if driver.company != truck.company:
+                raise serializers.ValidationError(
+                    "Driver and truck must belong to the same company"
                 )
         
         return data

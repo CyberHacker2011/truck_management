@@ -220,15 +220,29 @@ class DeliveryTask(models.Model):
         """
         Override save to update driver and truck status when task is assigned.
         """
-        if self.status == 'assigned':
-            self.driver.status = 'on_mission'
-            self.driver.save()
-            self.truck.current_status = 'in_use'
-            self.truck.save()
-        elif self.status == 'completed':
-            self.driver.status = 'available'
-            self.driver.save()
-            self.truck.current_status = 'idle'
-            self.truck.save()
+        # Only update status if this is a new task or status is changing
+        is_new = self.pk is None
+        status_changed = False
+        
+        if not is_new:
+            try:
+                old_task = DeliveryTask.objects.get(pk=self.pk)
+                status_changed = old_task.status != self.status
+            except DeliveryTask.DoesNotExist:
+                status_changed = True
+        
+        if is_new or status_changed:
+            if self.status == 'assigned':
+                # Only update if driver and truck are available
+                if self.driver.status == 'available' and self.truck.current_status == 'idle':
+                    self.driver.status = 'on_mission'
+                    self.driver.save()
+                    self.truck.current_status = 'in_use'
+                    self.truck.save()
+            elif self.status == 'completed':
+                self.driver.status = 'available'
+                self.driver.save()
+                self.truck.current_status = 'idle'
+                self.truck.save()
         
         super().save(*args, **kwargs)
