@@ -47,11 +47,11 @@ def calculate_route_google_maps(
         
         logger.info(f"Google Maps route calculation requested for {len(destinations)} destinations")
         
-        google_maps = OpenRouteService(api_key)
+        openroute_service = OpenRouteService(api_key)
         
         # Build circular route: origin -> destinations -> back to origin
         all_points = [origin] + destinations + [origin]
-        route_result = google_maps.build_circular_route(all_points)
+        route_result = openroute_service.build_circular_route(all_points)
         
         if 'error' in route_result:
             raise MapsAPIError(f"Google Maps routing failed: {route_result.get('message', 'Unknown error')}")

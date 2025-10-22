@@ -230,10 +230,22 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
         destination_points = list(task.destinations.all())
         if destination_points:
             try:
-                api_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', None)
-                google_maps = OpenRouteService(api_key)
-                coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
-                route_json = google_maps.build_circular_route(coords)
+                api_key = getattr(settings, 'OPENROUTE_API_KEY', None)
+                openroute_service = OpenRouteService(api_key)
+                
+                # Get the base location for this company
+                base_location = task.company.destinations.filter(is_base_location=True).first()
+                
+                if base_location:
+                    # Create route: base -> destinations -> back to base
+                    coords = [(float(base_location.latitude), float(base_location.longitude))]  # Start at base
+                    coords.extend([(float(d.latitude), float(d.longitude)) for d in destination_points])  # Add destinations
+                    coords.append((float(base_location.latitude), float(base_location.longitude)))  # Return to base
+                else:
+                    # Fallback: use destinations only (no base location set)
+                    coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
+                
+                route_json = openroute_service.build_circular_route(coords)
                 task.route_data = route_json
                 task.save()
             except Exception as exc:
@@ -291,14 +303,26 @@ def task_create_view(request):
         )
         task.destinations.set(destinations)
 
-    # Generate route
+    # Generate route with base location as start/end point
     destination_points = list(task.destinations.all())
     if destination_points:
         try:
-            api_key = getattr(settings, 'GOOGLE_MAPS_API_KEY', None)
-            google_maps = OpenRouteService(api_key)
-            coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
-            route_json = google_maps.build_circular_route(coords)
+            api_key = getattr(settings, 'OPENROUTE_API_KEY', None)
+            openroute_service = OpenRouteService(api_key)
+            
+            # Get the base location for this company
+            base_location = task.company.destinations.filter(is_base_location=True).first()
+            
+            if base_location:
+                # Create route: base -> destinations -> back to base
+                coords = [(float(base_location.latitude), float(base_location.longitude))]  # Start at base
+                coords.extend([(float(d.latitude), float(d.longitude)) for d in destination_points])  # Add destinations
+                coords.append((float(base_location.latitude), float(base_location.longitude)))  # Return to base
+            else:
+                # Fallback: use destinations only (no base location set)
+                coords = [(float(d.latitude), float(d.longitude)) for d in destination_points]
+            
+            route_json = openroute_service.build_circular_route(coords)
             task.route_data = route_json
             task.save()
         except Exception as exc:

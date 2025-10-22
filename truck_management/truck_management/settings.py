@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'drf_yasg',
     'core',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
@@ -94,7 +95,6 @@ DATABASES = {
     }
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -138,8 +138,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Django REST Framework configuration
 
-# Google Maps API key
+# API keys
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY')
+OPENROUTE_API_KEY = os.getenv('OPENROUTE_API_KEY')
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',

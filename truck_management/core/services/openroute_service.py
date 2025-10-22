@@ -34,6 +34,10 @@ class OpenRouteService:
         self.api_key = api_key or os.getenv("OPENROUTE_API_KEY")
         if not self.api_key:
             raise ValueError("OPENROUTE_API_KEY environment variable is required")
+        
+        # Validate API key format (OpenRouteService keys typically start with specific patterns)
+        if len(self.api_key) < 20:
+            raise ValueError("Invalid API key format. OpenRouteService API keys should be longer.")
     
     def get_route(self, start_lat: float, start_lng: float, end_lat: float, end_lng: float) -> Dict[str, Any]:
         """
@@ -61,7 +65,7 @@ class OpenRouteService:
         coordinates = [[start_lng, start_lat], [end_lng, end_lat]]
         
         headers = {
-            "Authorization": self.api_key,
+            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
         
@@ -111,10 +115,118 @@ class OpenRouteService:
                 "message": "Failed to connect to OpenRouteService API"
             }
         except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code
+            error_message = f"HTTP error {status_code}: {str(e)}"
+            
+            # Handle specific HTTP error codes
+            if status_code == 403:
+                error_message = "Access forbidden (403). Check your API key and permissions."
+            elif status_code == 401:
+                error_message = "Unauthorized (401). Invalid API key."
+            elif status_code == 429:
+                error_message = "Rate limit exceeded (429). Too many requests."
+            elif status_code == 400:
+                error_message = "Bad request (400). Check your request parameters."
+            
             return {
                 "error": "http_error",
-                "message": f"HTTP error {e.response.status_code}: {str(e)}",
-                "status_code": e.response.status_code
+                "message": error_message,
+                "status_code": status_code
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                "error": "request_error",
+                "message": f"Request failed: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "error": "unexpected_error",
+                "message": f"Unexpected error: {str(e)}"
+            }
+    
+    def get_route_with_waypoints(self, points: List[Tuple[float, float]]) -> Dict[str, Any]:
+        """
+        Get route through multiple waypoints using OpenRouteService API.
+        
+        Args:
+            points: List of (latitude, longitude) tuples
+            
+        Returns:
+            Dict containing the full parsed JSON result from OpenRouteService API
+        """
+        url = f"{self.BASE_URL}/{self.ROUTE_TYPE}"
+        
+        # Prepare coordinates in [longitude, latitude] format as required by ORS
+        coordinates = [[lng, lat] for lat, lng in points]
+        
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "coordinates": coordinates,
+            "format": "geojson",
+            "radiuses": [-1] * len(coordinates),  # -1 means no radius restriction for each point
+            "continue_straight": False,
+            "preference": "fastest",
+            "units": "m",
+            "geometry": True,
+            "instructions": False,
+            "maneuvers": False
+        }
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Check for API-level errors
+            if "error" in data:
+                return {
+                    "error": "api_error",
+                    "message": data.get("error", {}).get("message", "Unknown API error"),
+                    "details": data.get("error", {})
+                }
+            
+            # Check if route was found
+            if not data.get("features") or len(data["features"]) == 0:
+                return {
+                    "error": "no_route_found",
+                    "message": "No route could be calculated between the given coordinates"
+                }
+            
+            return data
+            
+        except requests.exceptions.Timeout:
+            return {
+                "error": "timeout_error",
+                "message": "Request to OpenRouteService API timed out"
+            }
+        except requests.exceptions.ConnectionError:
+            return {
+                "error": "connection_error", 
+                "message": "Failed to connect to OpenRouteService API"
+            }
+        except requests.exceptions.HTTPError as e:
+            status_code = e.response.status_code
+            error_message = f"HTTP error {status_code}: {str(e)}"
+            
+            # Handle specific HTTP error codes
+            if status_code == 403:
+                error_message = "Access forbidden (403). Check your API key and permissions."
+            elif status_code == 401:
+                error_message = "Unauthorized (401). Invalid API key."
+            elif status_code == 429:
+                error_message = "Rate limit exceeded (429). Too many requests."
+            elif status_code == 400:
+                error_message = "Bad request (400). Check your request parameters."
+            
+            return {
+                "error": "http_error",
+                "message": error_message,
+                "status_code": status_code
             }
         except requests.exceptions.RequestException as e:
             return {
@@ -141,14 +253,27 @@ class OpenRouteService:
         if len(points) < 2:
             return {"error": "not_enough_points"}
         
-        # Get route from first point to last point
-        start_lat, start_lng = points[0]
-        end_lat, end_lng = points[-1]
+        # Validate coordinates
+        for lat, lng in points:
+            if not (-90 <= lat <= 90) or not (-180 <= lng <= 180):
+                return {
+                    "error": "invalid_coordinates",
+                    "message": f"Invalid coordinates: lat={lat}, lng={lng}"
+                }
         
-        route_data = self.get_route(start_lat, start_lng, end_lat, end_lng)
+        # For circular route, we need to handle multiple waypoints
+        if len(points) == 2:
+            # Simple route between two points
+            start_lat, start_lng = points[0]
+            end_lat, end_lng = points[1]
+            route_data = self.get_route(start_lat, start_lng, end_lat, end_lng)
+        else:
+            # Multiple waypoints - create a route that goes through all points
+            route_data = self.get_route_with_waypoints(points)
         
         if "error" in route_data:
-            return route_data
+            # If OpenRouteService fails, provide a fallback with estimated data
+            return self._create_fallback_route(points, route_data.get("error", "unknown_error"))
         
         try:
             feature = route_data["features"][0]
@@ -166,6 +291,72 @@ class OpenRouteService:
             return {
                 "error": "parsing_error",
                 "message": f"Failed to parse route data: {str(e)}"
+            }
+    
+    def _create_fallback_route(self, points: List[Tuple[float, float]], error_type: str) -> Dict[str, Any]:
+        """
+        Create a fallback route when OpenRouteService fails.
+        This provides estimated distance and duration based on straight-line distance.
+        """
+        try:
+            import math
+            
+            total_distance = 0
+            total_duration = 0
+            
+            # Calculate straight-line distances between consecutive points
+            for i in range(len(points) - 1):
+                lat1, lng1 = points[i]
+                lat2, lng2 = points[i + 1]
+                
+                # Haversine formula for distance calculation
+                R = 6371000  # Earth's radius in meters
+                dlat = math.radians(lat2 - lat1)
+                dlng = math.radians(lng2 - lng1)
+                a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng/2) * math.sin(dlng/2)
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                distance = R * c
+                
+                total_distance += distance
+                # Estimate duration based on average driving speed (50 km/h = 13.89 m/s)
+                total_duration += distance / 13.89
+            
+            # Add return journey if it's a circular route
+            if len(points) > 2:
+                lat1, lng1 = points[-1]
+                lat2, lng2 = points[0]
+                dlat = math.radians(lat2 - lat1)
+                dlng = math.radians(lng2 - lng1)
+                a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng/2) * math.sin(dlng/2)
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                return_distance = R * c
+                total_distance += return_distance
+                total_duration += return_distance / 13.89
+            
+            return {
+                "distance": int(total_distance),
+                "duration": int(total_duration),
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[lng, lat] for lat, lng in points]
+                },
+                "polyline": {
+                    "type": "LineString", 
+                    "coordinates": [[lng, lat] for lat, lng in points]
+                },
+                "raw": {
+                    "fallback": True,
+                    "original_error": error_type,
+                    "message": "Route calculated using straight-line distance estimation"
+                },
+                "fallback": True,
+                "message": f"OpenRouteService failed ({error_type}), using estimated route"
+            }
+            
+        except Exception as e:
+            return {
+                "error": "fallback_failed",
+                "message": f"Both OpenRouteService and fallback failed: {str(e)}"
             }
     
     def get_route_summary(self, start_lat: float, start_lng: float, end_lat: float, end_lng: float) -> Dict[str, Any]:

@@ -136,6 +136,7 @@ class Truck(models.Model):
 class Destination(models.Model):
     """
     Destination model representing delivery locations.
+    Can be either a regular destination or a base location (garage/warehouse).
     """
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='destinations')
     name = models.CharField(max_length=200, help_text="Destination name or business name")
@@ -150,6 +151,10 @@ class Destination(models.Model):
         decimal_places=7, 
         help_text="Longitude coordinate"
     )
+    is_base_location = models.BooleanField(
+        default=False, 
+        help_text="Whether this is the company's base location (garage/warehouse)"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -157,9 +162,31 @@ class Destination(models.Model):
         ordering = ['name']
         verbose_name = 'Destination'
         verbose_name_plural = 'Destinations'
+        constraints = [
+            # Ensure only one base location per company
+            models.UniqueConstraint(
+                fields=['company', 'is_base_location'], 
+                condition=models.Q(is_base_location=True),
+                name='unique_base_location_per_company'
+            )
+        ]
     
     def __str__(self):
-        return f"{self.name} - {self.address}"
+        base_indicator = " [BASE]" if self.is_base_location else ""
+        return f"{self.name}{base_indicator} - {self.address}"
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save to ensure only one base location per company.
+        """
+        if self.is_base_location:
+            # If this is being set as base location, unset any existing base location
+            Destination.objects.filter(
+                company=self.company, 
+                is_base_location=True
+            ).exclude(pk=self.pk).update(is_base_location=False)
+        
+        super().save(*args, **kwargs)
 
 
 class DeliveryTask(models.Model):

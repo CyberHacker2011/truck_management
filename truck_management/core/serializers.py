@@ -66,7 +66,7 @@ class DestinationSerializer(serializers.ModelSerializer):
         model = Destination
         fields = [
             'id', 'company', 'name', 'address', 'latitude', 'longitude', 
-            'created_at', 'updated_at'
+            'is_base_location', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     

@@ -58,25 +58,35 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write(f'Created truck: {truck.model} ({truck.plate_number}) ({truck.company.name})')
 
-        # Create three destinations
+        # Create destinations including base location
         destinations_data = [
             {
-                'name': 'Central Warehouse',
-                'address': '123 Industrial Blvd, Downtown, NY 10001',
-                'latitude': Decimal('40.7589'),
-                'longitude': Decimal('-73.9851')
+                'name': 'Acme Logistics Main Garage',
+                'address': '100 Main St, Downtown, NY 10000',
+                'latitude': Decimal('40.4494'),
+                'longitude': Decimal('68.8049'),
+                'is_base_location': True  # This is the base location
             },
             {
                 'name': 'North Distribution Center',
                 'address': '456 Commerce St, Uptown, NY 10002',
-                'latitude': Decimal('40.7614'),
-                'longitude': Decimal('-73.9776')
+                'latitude': Decimal('40.3820'),
+                'longitude': Decimal('68.7960'),
+                'is_base_location': False
             },
             {
                 'name': 'South Logistics Hub',
                 'address': '789 Supply Ave, Midtown, NY 10003',
-                'latitude': Decimal('40.7505'),
-                'longitude': Decimal('-73.9934')
+                'latitude': Decimal('40.4926'),
+                'longitude': Decimal('68.8314'),
+                'is_base_location': False
+            },
+            {
+                'name': 'East Delivery Point',
+                'address': '321 Delivery Rd, Eastside, NY 10004',
+                'latitude': Decimal('40.4962'),
+                'longitude': Decimal('68.7738'),
+                'is_base_location': False
             }
         ]
 
@@ -92,8 +102,9 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write(f'Created destination: {destination.name} ({destination.company.name})')
 
-        # Create one task with 3 destinations
-        if drivers and trucks and len(destinations) >= 3:
+        # Create one task with delivery destinations (excluding base location)
+        delivery_destinations = [d for d in destinations if not d.is_base_location]
+        if drivers and trucks and len(delivery_destinations) >= 2:
             task, created = DeliveryTask.objects.get_or_create(
                 company=company_a,
                 driver=drivers[0],
@@ -102,9 +113,10 @@ class Command(BaseCommand):
                 product_weight=500,
                 status='assigned'
             )
-            task.destinations.set(destinations[:3])
+            task.destinations.set(delivery_destinations[:3])  # Use first 3 delivery destinations
             if created:
                 self.stdout.write(f'Created delivery task: {task.product_name} - {task.driver.name}')
+                self.stdout.write(f'Task will route from base location to {len(delivery_destinations[:3])} destinations and back to base')
 
         self.stdout.write(
             self.style.SUCCESS('Successfully populated database with sample data!')
