@@ -1,302 +1,300 @@
-# 🚛 Multi-Company Truck Management System
+# Truck Management System
 
-A Django-based backend system for managing truck fleets across multiple companies with role-based access control and JWT authentication.
+A comprehensive Django-based backend system for managing truck fleets, drivers, and delivery tasks with route optimization capabilities.
 
-## 🌟 Features
+## Table of Contents
 
-### Multi-Tenant Architecture
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [API Documentation](#api-documentation)
+- [Authentication](#authentication)
+- [Models & Endpoints](#models--endpoints)
+- [Frontend Integration Guide](#frontend-integration-guide)
+- [Error Handling](#error-handling)
+- [Development Guidelines](#development-guidelines)
 
-- **Company Separation**: Complete data isolation between companies
-- **Role-Based Access**: Company Admin and Driver User roles
-- **Secure Authentication**: JWT-based API authentication
-- **PostgreSQL Database**: Production-ready database with proper constraints
+## Features
 
-### Core Functionality
+- Multi-tenant architecture with company-based data isolation
+- User role management (Company Admins, Drivers)
+- Fleet management (Trucks, Drivers)
+- Delivery task management and assignment
+- Route optimization using OpenRouteService
+- RESTful API with Django REST Framework
+- JWT-based authentication
+- Swagger/OpenAPI documentation
 
-- **Driver Management**: Track drivers with experience, status, and company assignment
-- **Truck Fleet**: Manage trucks with capacity, fuel type, and availability
-- **Delivery Tasks**: Assign and track delivery tasks across multiple destinations
-- **Route Optimization**: Integration-ready for Google Maps and Yandex Maps APIs
-- **Admin Panel**: Company-scoped Django admin interface
+## Tech Stack
 
-### API Endpoints
+- Python 3.13
+- Django 5.2
+- Django REST Framework
+- PostgreSQL
+- JWT Authentication
+- OpenRouteService API for routing
+- Swagger/OpenAPI for API documentation
 
-- **Authentication**: JWT token-based login system
-- **Companies**: CRUD operations for company management
-- **Drivers**: Company-scoped driver management
-- **Trucks**: Fleet management with availability tracking
-- **Destinations**: Delivery location management
-- **Delivery Tasks**: Task assignment and status tracking
+## Project Structure
 
-## 🚀 Quick Start
+```
+truck_management/
+├── core/                      # Main application directory
+│   ├── models.py             # Data models
+│   ├── views.py              # API views and endpoints
+│   ├── serializers.py        # Model serializers
+│   ├── urls.py               # URL routing
+│   ├── admin.py              # Admin interface configuration
+│   ├── maps_utils.py         # Map utility functions
+│   ├── services/             # External service integrations
+│   │   ├── google_maps.py    # Google Maps integration
+│   │   └── openroute_service.py  # OpenRoute Service integration
+│   └── management/           # Custom management commands
+│       └── commands/
+│           └── populate_sample_data.py  # Sample data population
+└── truck_management/         # Project configuration
+    ├── settings.py           # Project settings
+    ├── urls.py              # Main URL configuration
+    └── wsgi.py              # WSGI configuration
+```
+
+## Models
+
+### Company
+
+- Multi-tenant model for organization management
+- Fields: name, created_at, updated_at
+
+### Driver
+
+- Represents truck drivers
+- Fields: name, phone, license_number, experience_years, status
+- Status options: available, on_mission
+
+### Truck
+
+- Represents vehicles in the fleet
+- Fields: registration_number, model, capacity, fuel_type, status
+- Status options: idle, in_use
+
+### DeliveryTask
+
+- Manages delivery assignments
+- Fields: origin, destinations, assigned_driver, assigned_truck, status
+- Includes route optimization capabilities
+
+## API Endpoints
+
+### Authentication
+
+- POST /api/token/ - Obtain JWT token
+- POST /api/token/refresh/ - Refresh JWT token
+
+### Drivers
+
+- GET /api/drivers/ - List drivers
+- POST /api/drivers/ - Create driver
+- GET /api/drivers/{id}/ - Retrieve driver
+- PUT /api/drivers/{id}/ - Update driver
+- DELETE /api/drivers/{id}/ - Delete driver
+- GET /api/drivers/available/ - List available drivers
+
+### Trucks
+
+- GET /api/trucks/ - List trucks
+- POST /api/trucks/ - Create truck
+- GET /api/trucks/{id}/ - Retrieve truck
+- PUT /api/trucks/{id}/ - Update truck
+- DELETE /api/trucks/{id}/ - Delete truck
+- GET /api/trucks/available/ - List available trucks
+
+### Delivery Tasks
+
+- GET /api/tasks/ - List tasks
+- POST /api/tasks/ - Create task
+- GET /api/tasks/{id}/ - Retrieve task
+- PUT /api/tasks/{id}/ - Update task
+- DELETE /api/tasks/{id}/ - Delete task
+- POST /api/tasks/{id}/assign/ - Assign driver and truck
+- GET /api/tasks/{id}/route/ - Get optimized route
+
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.8+
-- PostgreSQL 12+
-- pipenv (recommended) or pip
+- Python 3.13
+- PostgreSQL
+- Pipenv
+- OpenRouteService API key
 
-### Installation
+### Setup Instructions
 
-1. **Clone the repository**
+1. Clone the repository
 
 ```bash
 git clone <repository-url>
 cd truck_management
 ```
 
-2. **Install dependencies**
+2. Install dependencies using Pipenv
 
 ```bash
+# Install Pipenv if you haven't
+pip install pipenv
+
+# Install project dependencies
 pipenv install
-# or
-pip install -r requirements.txt
+
+# Activate the virtual environment
+pipenv shell
 ```
 
-3. **Setup PostgreSQL database**
-
-```sql
-CREATE DATABASE truckdb;
-CREATE USER postgres WITH PASSWORD 'yourpassword';
-GRANT ALL PRIVILEGES ON DATABASE truckdb TO postgres;
-```
-
-4. **Configure environment variables**
-   Create `.env` file in `truck_management/` directory:
+3. Set up environment variables
+   Create a `.env` file in the project root:
 
 ```env
 DB_NAME=truckdb
 DB_USER=postgres
-DB_PASSWORD=yourpassword
+DB_PASSWORD=your_password
 DB_HOST=localhost
 DB_PORT=5432
+OPENROUTE_API_KEY=your_openroute_api_key
 ```
 
-5. **Run migrations**
+4. Initialize the database
 
 ```bash
-pipenv run python manage.py makemigrations
 pipenv run python manage.py migrate
-```
-
-6. **Create superuser**
-
-```bash
 pipenv run python manage.py createsuperuser
 ```
 
-7. **Populate sample data**
+5. Load sample data (optional)
 
 ```bash
 pipenv run python manage.py populate_sample_data
 ```
 
-8. **Start development server**
+6. Run the development server
 
 ```bash
 pipenv run python manage.py runserver
 ```
 
-## 🔐 User Roles & Permissions
+## Frontend Integration Guide
 
-### Superuser
+### Setting Up API Client
 
-- Full access to all companies and data
-- Can manage all system settings
-- Access to Django admin panel
-
-### Company Admin
-
-- Manages only their assigned company's data
-- Can create/edit drivers, trucks, destinations, and tasks
-- Company-scoped API access
-- Limited admin panel access
-
-### Driver User
-
-- Read-only access to their assigned tasks
-- Can view task details and destinations
-- Cannot create or modify data
-
-## 🧪 Testing the System
-
-### Sample Users Created
-
-After running `populate_sample_data`, these test users are available:
-
-**Company Admins:**
-
-- `acme_admin` / `admin123` (Acme Logistics)
-- `bolt_admin` / `admin123` (Bolt Transport)
-
-**Driver Users:**
-
-- `driver1` / `driver123`
-- `driver2` / `driver123`
-- `driver3` / `driver123`
-- `driver4` / `driver123`
-
-### API Testing
-
-1. **Get JWT Token**
+1. **Install Axios or your preferred HTTP client**:
 
 ```bash
-curl -X POST http://localhost:8000/api/auth/token/ \
-  -H "Content-Type: application/json" \
-  -d '{"username": "acme_admin", "password": "admin123"}'
+npm install axios
+# or
+yarn add axios
 ```
 
-2. **Access Company-Scoped Data**
+2. **Create API client with authentication**:
 
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  http://localhost:8000/api/drivers/
+```javascript
+// api/client.js
+import axios from "axios";
+
+const api = axios.create({
+  baseURL: "http://localhost:8000/api",
+});
+
+// Add auth token to requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("access_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle token refresh
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response.status === 401) {
+      // Try to refresh token
+      const refresh = localStorage.getItem("refresh_token");
+      try {
+        const response = await axios.post("/api/token/refresh/", { refresh });
+        localStorage.setItem("access_token", response.data.access);
+        error.config.headers.Authorization = `Bearer ${response.data.access}`;
+        return axios(error.config);
+      } catch (refreshError) {
+        // Redirect to login
+        localStorage.clear();
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
 ```
 
-3. **API Documentation**
-   Visit: http://localhost:8000/api/docs/
+3. **Example API calls**:
 
-## 📁 Project Structure
+```javascript
+// Authentication
+const login = async (username, password) => {
+  const response = await api.post("/token/", { username, password });
+  localStorage.setItem("access_token", response.data.access);
+  localStorage.setItem("refresh_token", response.data.refresh);
+  return response.data;
+};
 
-```
-truck_management/
-├── truck_management/          # Django project settings
-│   ├── settings.py           # Main configuration
-│   ├── urls.py              # URL routing
-│   └── .env                 # Environment variables
-├── core/                    # Main application
-│   ├── models.py           # Database models
-│   ├── views.py            # API viewsets
-│   ├── serializers.py      # DRF serializers
-│   ├── admin.py            # Django admin config
-│   ├── urls.py             # API routing
-│   ├── permissions.py      # Custom permissions
-│   └── management/
-│       └── commands/
-│           └── populate_sample_data.py
-└── README.md
-```
+// Fetch drivers
+const getDrivers = async (status) => {
+  const params = status ? { status } : {};
+  const response = await api.get("/drivers/", { params });
+  return response.data;
+};
 
-## 🔧 API Endpoints
-
-### Authentication
-
-- `POST /api/auth/token/` - Get JWT access token
-- `POST /api/auth/token/refresh/` - Refresh JWT token
-
-### Core Resources
-
-- `GET/POST /api/companies/` - Company management
-- `GET/POST /api/drivers/` - Driver management
-- `GET/POST /api/trucks/` - Truck fleet management
-- `GET/POST /api/destinations/` - Delivery destinations
-- `GET/POST /api/delivery-tasks/` - Task management
-
-### Specialized Endpoints
-
-- `GET /api/drivers/available/` - Available drivers only
-- `GET /api/trucks/available/` - Available trucks only
-- `GET /api/delivery-tasks/active/` - Active tasks only
-- `POST /api/delivery-tasks/assign/` - Assign new task
-- `POST /api/tasks/create/` - Create task with Yandex route generation
-- `GET /api/tasks/<id>/` - Get task with complete route data
-
-## 🛡️ Security Features
-
-- **JWT Authentication**: Secure token-based API access
-- **Company Data Isolation**: Users can only access their company's data
-- **Role-Based Permissions**: Different access levels for different user types
-- **Input Validation**: Comprehensive data validation and sanitization
-- **CORS Configuration**: Proper cross-origin request handling
-
-## 🗺️ Yandex Maps Integration
-
-The system now includes **full Yandex Maps API integration**:
-
-- **Automatic Route Generation**: Circular routes generated when tasks are created
-- **Route Data Storage**: Complete route JSON stored in `route_data` field
-- **Geocoding Support**: Address to coordinates conversion
-- **Error Handling**: Graceful fallback when API is unavailable
-- **Company Isolation**: All routes are company-scoped
-
-### New API Endpoints
-
-- `POST /api/tasks/create/` - Create task with automatic route generation
-- `GET /api/tasks/<id>/` - Retrieve task with full route data
-
-### Environment Setup
-
-Add to your `.env` file:
-```env
-YANDEX_API_KEY=your_yandex_api_key_here
+// Create delivery task
+const createTask = async (taskData) => {
+  const response = await api.post("/tasks/", taskData);
+  return response.data;
+};
 ```
 
-## 📊 Database Schema
+## Error Handling
 
-### Core Models
+The API returns standardized error responses:
 
-- **Company**: Tenant/company information
-- **CompanyAdmin**: Links Django User to Company
-- **DriverUser**: Links Django User to Driver
-- **Driver**: Driver information with company assignment
-- **Truck**: Vehicle information with company assignment
-- **Destination**: Delivery locations with company assignment
-- **DeliveryTask**: Tasks linking drivers, trucks, and destinations
-  - **route_data**: JSONField storing Yandex route information
-
-### Key Constraints
-
-- Unique license numbers per company
-- Unique plate numbers per company
-- Foreign key relationships with CASCADE deletion
-- Proper indexing for performance
-
-## 🚀 Deployment Considerations
-
-### Production Setup
-
-1. Set `DEBUG = False` in settings
-2. Configure proper `ALLOWED_HOSTS`
-3. Use environment variables for sensitive data
-4. Set up SSL certificates
-5. Configure proper CORS origins
-6. Use production PostgreSQL configuration
-7. Set up proper logging and monitoring
-
-### Environment Variables
-
-```env
-DB_NAME=production_db_name
-DB_USER=production_user
-DB_PASSWORD=secure_password
-DB_HOST=production_host
-DB_PORT=5432
-SECRET_KEY=your_secret_key
-DEBUG=False
-ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+```javascript
+{
+    "error": string,
+    "message": string,
+    "details": object | null
+}
 ```
 
-## 🤝 Contributing
+Common HTTP status codes:
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+- 400: Bad Request (invalid data)
+- 401: Unauthorized (invalid/expired token)
+- 403: Forbidden (insufficient permissions)
+- 404: Not Found
+- 500: Internal Server Error
 
-## 📄 License
+## Development Guidelines
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### API Testing with Swagger
 
-## 🆘 Support
+1. Visit http://localhost:8000/swagger/
+2. Click "Authorize" and enter your Bearer token
+3. Test endpoints directly from the Swagger UI
 
-For support and questions:
+### Data Validation
 
-- Create an issue in the repository
-- Check the API documentation at `/api/docs/`
-- Review the Django admin panel at `/admin/`
+All API endpoints perform validation. Common validation rules:
 
----
+- Driver license numbers must be unique per company
+- Phone numbers must be in valid format
+- Experience years must be between 0 and 50
+- Coordinates must be valid latitude/longitude values
 
-**Built with Django 5.2, Django REST Framework, and PostgreSQL**
