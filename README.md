@@ -24,6 +24,8 @@ A comprehensive Django-based backend system for managing truck fleets, drivers, 
 - RESTful API with Django REST Framework
 - JWT-based authentication
 - Swagger/OpenAPI documentation
+- Real-time driver location tracking
+- Task start functionality for drivers
 
 ## Tech Stack
 
@@ -108,13 +110,23 @@ truck_management/
 - DELETE /api/trucks/{id}/ - Delete truck
 - GET /api/trucks/available/ - List available trucks
 
+### Destinations
+
+- GET /api/destinations/ - List destinations
+- POST /api/destinations/ - Create destination
+- GET /api/destinations/{id}/ - Retrieve destination
+- PUT /api/destinations/{id}/ - Update destination
+- DELETE /api/destinations/{id}/ - Delete destination
+
 ### Delivery Tasks
 
-- GET /api/tasks/ - List tasks
-- POST /api/tasks/ - Create task
-- GET /api/tasks/{id}/ - Retrieve task
-- PUT /api/tasks/{id}/ - Update task
-- DELETE /api/tasks/{id}/ - Delete task
+- GET /api/tasks/ - List delivery tasks
+- POST /api/tasks/ - Create delivery task
+- GET /api/tasks/{id}/ - Retrieve delivery task
+- PUT /api/tasks/{id}/ - Update delivery task
+- DELETE /api/tasks/{id}/ - Delete delivery task
+- POST /api/tasks/{id}/start_task/ - Start a delivery task (driver only)
+- POST /api/tasks/{id}/update_location/ - Update driver's location (driver only)
 - POST /api/tasks/{id}/assign/ - Assign driver and truck
 - GET /api/tasks/{id}/route/ - Get optimized route
 

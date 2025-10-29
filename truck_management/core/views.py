@@ -264,6 +264,97 @@ class DeliveryTaskViewSet(viewsets.ModelViewSet):
         if not (self.request.user.is_superuser or (hasattr(self.request.user, 'company_admin') and instance.company_id == (user_company.id if user_company else None))):
             raise permissions.PermissionDenied('Not allowed')
         serializer.save()
+        
+    @action(detail=True, methods=['post'])
+    def start_task(self, request, pk=None):
+        """
+        Start a delivery task and record the initial driver location.
+        Only the assigned driver can start their own task.
+        """
+        task = self.get_object()
+        
+        # Check if the user is the assigned driver
+        if not hasattr(request.user, 'driver_user') or request.user.driver_user.driver.id != task.driver.id:
+            return Response(
+                {'detail': 'Only the assigned driver can start this task'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if task is already started
+        if task.is_started:
+            return Response(
+                {'detail': 'This task has already been started'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get driver's current location from request
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        
+        if not latitude or not longitude:
+            return Response(
+                {'detail': 'Driver location (latitude and longitude) is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update task with start information and location
+        from django.utils import timezone
+        task.is_started = True
+        task.started_at = timezone.now()
+        task.status = 'in_progress'
+        task.driver_latitude = latitude
+        task.driver_longitude = longitude
+        task.last_location_update = timezone.now()
+        task.save()
+        
+        return Response(
+            {'detail': 'Task started successfully', 'task_id': task.id},
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=True, methods=['post'])
+    def update_location(self, request, pk=None):
+        """
+        Update the driver's current location for a delivery task.
+        Only the assigned driver can update their location.
+        """
+        task = self.get_object()
+        
+        # Check if the user is the assigned driver
+        if not hasattr(request.user, 'driver_user') or request.user.driver_user.driver.id != task.driver.id:
+            return Response(
+                {'detail': 'Only the assigned driver can update location for this task'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if task is started
+        if not task.is_started:
+            return Response(
+                {'detail': 'This task has not been started yet'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get driver's current location from request
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        
+        if not latitude or not longitude:
+            return Response(
+                {'detail': 'Driver location (latitude and longitude) is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update task with new location
+        from django.utils import timezone
+        task.driver_latitude = latitude
+        task.driver_longitude = longitude
+        task.last_location_update = timezone.now()
+        task.save()
+        
+        return Response(
+            {'detail': 'Location updated successfully'},
+            status=status.HTTP_200_OK
+        )
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])

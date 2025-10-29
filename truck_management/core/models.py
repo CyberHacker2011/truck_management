@@ -197,6 +197,7 @@ class DeliveryTask(models.Model):
         ('assigned', 'Assigned'),
         ('in_progress', 'In Progress'),
         ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
     ]
     
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='delivery_tasks')
@@ -232,6 +233,23 @@ class DeliveryTask(models.Model):
     )
     # Stores full Yandex route JSON (coordinates, distance, duration)
     route_data = models.JSONField(null=True, blank=True)
+    is_started = models.BooleanField(default=False, help_text="Whether the driver has started this task")
+    started_at = models.DateTimeField(null=True, blank=True, help_text="When the driver started the task")
+    driver_latitude = models.DecimalField(
+        max_digits=10, 
+        decimal_places=7,
+        null=True, 
+        blank=True,
+        help_text="Current latitude of the driver"
+    )
+    driver_longitude = models.DecimalField(
+        max_digits=10, 
+        decimal_places=7,
+        null=True, 
+        blank=True,
+        help_text="Current longitude of the driver"
+    )
+    last_location_update = models.DateTimeField(null=True, blank=True, help_text="When the driver's location was last updated")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

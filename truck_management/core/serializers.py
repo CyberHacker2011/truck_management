@@ -107,9 +107,11 @@ class DeliveryTaskSerializer(serializers.ModelSerializer):
             'id', 'company', 'driver', 'truck', 'destinations', 'destination_ids',
             'driver_name', 'truck_plate', 'destinations_list',
             'product_name', 'product_weight', 'status', 'route_data', 
+            'is_started', 'started_at', 'driver_latitude', 'driver_longitude', 'last_location_update',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'route_data', 'company']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'route_data', 'company', 
+                           'is_started', 'started_at', 'driver_latitude', 'driver_longitude', 'last_location_update']
     
     def validate(self, data):
         """
